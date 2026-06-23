@@ -870,6 +870,16 @@ function updateNotificationCounts(container, countOverride = null) {
   });
 }
 
+function refreshAllNotificationCounts() {
+  document.querySelectorAll('[data-notification-center]').forEach((container) => updateNotificationCounts(container));
+}
+
+function refreshAllNotificationFilters() {
+  document.querySelectorAll('[data-notification-center]').forEach((container) => {
+    applyNotificationFilter(container.dataset.notificationFilter || 'all', container);
+  });
+}
+
 function setNotificationReadState(item, read) {
   if (!item) {
     return;
@@ -893,6 +903,17 @@ function setNotificationReadState(item, read) {
     : `${state} - ${currentTime}`;
   item.dataset.noteTime = nextTime;
   item.querySelector('[data-note-time]')?.replaceChildren(nextTime);
+}
+
+function setMatchingNotificationReadState(notificationId, read) {
+  if (!notificationId) {
+    return [];
+  }
+
+  const selector = `[data-notification-item][data-notification-id="${CSS.escape(notificationId)}"]`;
+  const items = [...document.querySelectorAll(selector)];
+  items.forEach((item) => setNotificationReadState(item, read));
+  return items;
 }
 
 async function postNotificationJson(url, payload) {
@@ -929,13 +950,9 @@ async function markNotificationItemRead(item) {
     return;
   }
 
-  setNotificationReadState(item, true);
-  updateNotificationCounts(container);
-  if ((container.dataset.notificationFilter || 'all') === 'unread') {
-    applyNotificationFilter('unread', container);
-  } else {
-    updateNotificationDetail(item);
-  }
+  setMatchingNotificationReadState(notificationId, true);
+  refreshAllNotificationCounts();
+  refreshAllNotificationFilters();
 
   try {
     const data = await postNotificationJson(
@@ -946,9 +963,9 @@ async function markNotificationItemRead(item) {
       updateNotificationCounts(container, data.unread_count);
     }
   } catch (error) {
-    setNotificationReadState(item, false);
-    updateNotificationCounts(container);
-    applyNotificationFilter(container.dataset.notificationFilter || 'all', container);
+    setMatchingNotificationReadState(notificationId, false);
+    refreshAllNotificationCounts();
+    refreshAllNotificationFilters();
     console.error(error);
   }
 }
@@ -963,15 +980,13 @@ async function markVisibleNotificationsRead(container) {
   const ids = items.map((item) => item.dataset.notificationId).filter(Boolean);
 
   if (ids.length === 0) {
-    updateNotificationCounts(container, 0);
+    refreshAllNotificationCounts();
     return;
   }
 
-  items.forEach((item) => setNotificationReadState(item, true));
-  updateNotificationCounts(container);
-  if ((container.dataset.notificationFilter || 'all') === 'unread') {
-    applyNotificationFilter('unread', container);
-  }
+  ids.forEach((notificationId) => setMatchingNotificationReadState(notificationId, true));
+  refreshAllNotificationCounts();
+  refreshAllNotificationFilters();
 
   try {
     const data = await postNotificationJson(container.dataset.readAllUrl, { ids });
@@ -979,9 +994,9 @@ async function markVisibleNotificationsRead(container) {
       updateNotificationCounts(container, data.unread_count);
     }
   } catch (error) {
-    items.forEach((item) => setNotificationReadState(item, false));
-    updateNotificationCounts(container);
-    applyNotificationFilter(container.dataset.notificationFilter || 'all', container);
+    ids.forEach((notificationId) => setMatchingNotificationReadState(notificationId, false));
+    refreshAllNotificationCounts();
+    refreshAllNotificationFilters();
     console.error(error);
   }
 }
@@ -1057,6 +1072,47 @@ function closeNotificationDrawer() {
   drawer.hidden = true;
   drawer.setAttribute('aria-hidden', 'true');
   document.documentElement.classList.remove('has-notification-drawer-open');
+}
+
+function resetCampaignForm() {
+  const form = document.querySelector('[data-campaign-form]');
+  if (!form) {
+    return;
+  }
+
+  form.reset();
+  const imageField = form.querySelector('[data-campaign-field="imageUrl"]');
+  if (imageField?.defaultValue) {
+    imageField.value = imageField.defaultValue;
+  }
+  form.querySelector('[data-campaign-form-title]')?.replaceChildren('Post Campaign');
+  const submit = form.querySelector('[data-campaign-submit]');
+  if (submit) {
+    submit.disabled = false;
+    submit.replaceChildren('Post Campaign');
+  }
+  form.querySelector('[data-campaign-edit-note]')?.setAttribute('hidden', '');
+}
+
+function fillCampaignForm(dataset) {
+  const form = document.querySelector('[data-campaign-form]');
+  if (!form) {
+    return;
+  }
+
+  form.querySelector('[data-campaign-form-title]')?.replaceChildren('Edit Campaign');
+  form.querySelectorAll('[data-campaign-field]').forEach((field) => {
+    const key = field.dataset.campaignField;
+    if (key && Object.prototype.hasOwnProperty.call(dataset, key)) {
+      field.value = dataset[key] || '';
+    }
+  });
+  form.querySelector('[data-campaign-edit-note]')?.removeAttribute('hidden');
+  const submit = form.querySelector('[data-campaign-submit]');
+  if (submit) {
+    submit.disabled = true;
+    submit.replaceChildren('Save Disabled');
+  }
 }
 
 function initNotificationDrawer() {
@@ -1315,6 +1371,32 @@ document.addEventListener('click', (event) => {
     return;
   }
 
+  const campaignCreate = event.target.closest('[data-campaign-create]');
+  if (campaignCreate) {
+    resetCampaignForm();
+  }
+
+  const campaignOpen = event.target.closest('[data-campaign-open]');
+  if (campaignOpen) {
+    openModal(document.querySelector(campaignOpen.dataset.campaignOpen));
+    return;
+  }
+
+  const campaignEdit = event.target.closest('[data-campaign-edit]');
+  if (campaignEdit) {
+    fillCampaignForm({
+      title: campaignEdit.dataset.campaignTitle,
+      status: campaignEdit.dataset.campaignStatus,
+      dateRange: campaignEdit.dataset.campaignDateRange,
+      locations: campaignEdit.dataset.campaignLocations,
+      imageUrl: campaignEdit.dataset.campaignImageUrl,
+      description: campaignEdit.dataset.campaignDescription,
+    });
+    closeModal(campaignEdit.closest('[data-modal]'));
+    openModal(document.querySelector('#campaign-modal'));
+    return;
+  }
+
   const modalOpen = event.target.closest('[data-modal-open]');
   if (modalOpen) {
     openModal(document.querySelector(modalOpen.dataset.modalOpen));
@@ -1440,6 +1522,16 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
     closeModal(document.querySelector('.modal-shell.is-open'));
     closeNotificationDrawer();
+  }
+
+  if (event.key === 'Enter' || event.key === ' ') {
+    const notificationItem = event.target.closest?.('[data-notification-item]');
+    const campaignCard = event.target.closest?.('[data-campaign-open]');
+
+    if (notificationItem || campaignCard) {
+      event.preventDefault();
+      (notificationItem || campaignCard).click();
+    }
   }
 });
 

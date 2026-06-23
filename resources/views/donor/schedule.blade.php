@@ -219,14 +219,6 @@
                                     <div class="mt-4"><label class="label">Document Description</label><input class="input" name="document_description" value="{{ old('document_description') }}" placeholder="e.g., laboratory result or physician order"></div>
                                 </section>
                             </div>
-                            <aside class="schedule-request-summary">
-                                <h3 class="font-bold">Request Summary</h3>
-                                <div class="mt-4 space-y-3 text-sm">
-                                    <div class="flex justify-between"><span>Priority Status</span><span class="badge">Pending Selection</span></div>
-                                    <div class="flex justify-between"><span>Processing Fee</span><strong>$0.00</strong></div>
-                                    <div class="rounded-lg border border-red-100 p-4"><p class="eyebrow">Estimated Fulfillment</p><strong>--:--</strong></div>
-                                </div>
-                            </aside>
                         </div>
                     </div>
 

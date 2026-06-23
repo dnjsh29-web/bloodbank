@@ -534,30 +534,84 @@
     </section>
 
 @elseif ($section === 'campaigns')
-    <div class="mb-7 flex flex-wrap items-start justify-between gap-4"><header><h1 class="page-title">Campaigns</h1><p class="page-subtitle">Regional collection drives and community outreach.</p></header><button class="btn-primary" data-modal-open="#campaign-modal" type="button"><i data-lucide="plus"></i> Post Campaign</button></div>
+    <div class="mb-7 flex flex-wrap items-start justify-between gap-4"><header><h1 class="page-title">Campaigns</h1><p class="page-subtitle">Regional collection drives and community outreach.</p></header><button class="btn-primary" data-campaign-create data-modal-open="#campaign-modal" type="button"><i data-lucide="plus"></i> Post Campaign</button></div>
     <div id="campaign-modal" class="modal-shell" data-modal hidden>
         <div class="modal-backdrop" data-modal-backdrop></div>
-        <form class="modal-panel" method="post" action="{{ route('admin.campaigns.store') }}">
+        <form class="modal-panel" method="post" action="{{ route('admin.campaigns.store') }}" data-campaign-form>
             @csrf
             <div class="modal-header">
-                <h2>Post Campaign</h2>
+                <h2 data-campaign-form-title>Post Campaign</h2>
                 <button class="modal-close" type="button" data-modal-close aria-label="Close campaign form">x</button>
             </div>
             <div class="form-grid">
-                <div><label class="label">Campaign Title</label><input class="input" name="title" placeholder="Community Heroes Week" required></div>
-                <div><label class="label">Status</label><select class="select" name="status"><option>Upcoming</option><option>Open</option><option>Urgent</option><option>Planning</option></select></div>
-                <div><label class="label">Date Range</label><input class="input" name="date_range" placeholder="August 01 - August 15" required></div>
-                <div><label class="label">Locations</label><input class="input" name="locations" placeholder="Santa Rosa, Laguna" required></div>
+                <div><label class="label">Campaign Title</label><input class="input" name="title" data-campaign-field="title" placeholder="Community Heroes Week" required></div>
+                <div><label class="label">Status</label><select class="select" name="status" data-campaign-field="status"><option>Upcoming</option><option>Open</option><option>Urgent</option><option>Planning</option></select></div>
+                <div><label class="label">Date Range</label><input class="input" name="date_range" data-campaign-field="dateRange" placeholder="August 01 - August 15" required></div>
+                <div><label class="label">Locations</label><input class="input" name="locations" data-campaign-field="locations" placeholder="Santa Rosa, Laguna" required></div>
             </div>
-            <div class="mt-4"><label class="label">Image URL</label><input class="input" name="image_url" type="url" value="{{ $fallbackCampaigns[0]['image_url'] }}" placeholder="https://example.com/campaign.jpg" required></div>
-            <div class="mt-4"><label class="label">Description</label><textarea class="textarea" name="description" placeholder="Describe the campaign..." required></textarea></div>
+            <div class="mt-4"><label class="label">Image URL</label><input class="input" name="image_url" data-campaign-field="imageUrl" type="url" value="{{ $fallbackCampaigns[0]['image_url'] }}" placeholder="https://example.com/campaign.jpg" required></div>
+            <div class="mt-4"><label class="label">Description</label><textarea class="textarea" name="description" data-campaign-field="description" placeholder="Describe the campaign..." required></textarea></div>
+            <div class="campaign-edit-note mt-4" data-campaign-edit-note hidden>
+                Editing existing campaigns is ready in the UI, but no safe update route exists yet. Save is disabled so an existing campaign is not accidentally duplicated.
+            </div>
             <div class="modal-actions">
                 <button class="btn-secondary" type="button" data-modal-close>Cancel</button>
-                <button class="btn-primary" type="submit">Post Campaign</button>
+                <button class="btn-primary" type="submit" data-campaign-submit>Post Campaign</button>
             </div>
         </form>
     </div>
-    <section class="campaign-grid">@foreach ($campaignRows as $campaign)<article class="card campaign-card"><div class="relative"><img src="{{ $campaign['image_url'] }}" alt="{{ $campaign['title'] }}"><span class="badge is-active absolute left-4 top-4">{{ $campaign['status'] }}</span></div><div class="p-6"><h2 class="section-title">{{ $campaign['title'] }}</h2><p class="mt-2 text-sm leading-6 text-stone-600">{{ $campaign['description'] }}</p><p class="mt-5 text-xs font-bold text-stone-500">{{ $campaign['date_range'] }} - {{ $campaign['locations'] }}</p></div></article>@endforeach</section>
+    <section class="campaign-grid">
+        @foreach ($campaignRows as $campaign)
+            @php
+                $campaignId = 'campaign-detail-'.md5(($campaign['id'] ?? $campaign['title'] ?? $loop->index).$loop->index);
+            @endphp
+            <article
+                class="card campaign-card"
+                role="button"
+                tabindex="0"
+                data-campaign-open="#{{ $campaignId }}"
+            >
+                <div class="relative campaign-card-media"><img src="{{ $campaign['image_url'] }}" alt="{{ $campaign['title'] }}"><span class="badge is-active absolute left-4 top-4">{{ $campaign['status'] }}</span></div>
+                <div class="p-6"><h2 class="section-title">{{ $campaign['title'] }}</h2><p class="mt-2 text-sm leading-6 text-stone-600">{{ $campaign['description'] }}</p><p class="mt-5 text-xs font-bold text-stone-500">{{ $campaign['date_range'] }} - {{ $campaign['locations'] }}</p></div>
+            </article>
+            <div id="{{ $campaignId }}" class="modal-shell" data-modal hidden>
+                <div class="modal-backdrop" data-modal-backdrop></div>
+                <section class="modal-panel campaign-detail-modal" role="dialog" aria-modal="true" aria-labelledby="{{ $campaignId }}-title">
+                    <div class="modal-header">
+                        <div>
+                            <p class="eyebrow">Campaign Detail</p>
+                            <h2 id="{{ $campaignId }}-title">{{ $campaign['title'] }}</h2>
+                        </div>
+                        <button class="modal-close" type="button" data-modal-close aria-label="Close campaign detail">x</button>
+                    </div>
+                    <img class="campaign-detail-image" src="{{ $campaign['image_url'] }}" alt="{{ $campaign['title'] }}">
+                    <div class="detail-grid mt-4">
+                        <div><span>Status</span><strong>{{ $campaign['status'] }}</strong></div>
+                        <div><span>Date Range</span><strong>{{ $campaign['date_range'] }}</strong></div>
+                        <div><span>Locations</span><strong>{{ $campaign['locations'] }}</strong></div>
+                    </div>
+                    <section class="detail-section mt-4">
+                        <h3>Description</h3>
+                        <p class="text-sm leading-6 text-stone-600">{{ $campaign['description'] }}</p>
+                    </section>
+                    <div class="modal-actions">
+                        <button class="btn-secondary" type="button" data-modal-close>Close</button>
+                        <button
+                            class="btn-primary"
+                            type="button"
+                            data-campaign-edit
+                            data-campaign-title="{{ $campaign['title'] }}"
+                            data-campaign-status="{{ $campaign['status'] }}"
+                            data-campaign-date-range="{{ $campaign['date_range'] }}"
+                            data-campaign-locations="{{ $campaign['locations'] }}"
+                            data-campaign-image-url="{{ $campaign['image_url'] }}"
+                            data-campaign-description="{{ $campaign['description'] }}"
+                        >Edit</button>
+                    </div>
+                </section>
+            </div>
+        @endforeach
+    </section>
 
 @elseif ($section === 'security')
     <div class="mb-7 flex flex-wrap items-start justify-between gap-4"><header><h1 class="page-title">Audit Logs &amp; Security</h1><p class="page-subtitle">Monitor system integrity and user activity.</p></header><div class="flex gap-3"><div class="search-pill block"><i data-lucide="search"></i><input class="!w-[220px]" placeholder="Search logs..."></div><a class="btn-primary" data-turbo="false" href="{{ route('reports.download', 'security') }}"><i data-lucide="download"></i> Export Report</a></div></div>

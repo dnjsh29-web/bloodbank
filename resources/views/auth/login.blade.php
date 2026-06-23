@@ -66,7 +66,7 @@
                         @if ($portal === 'admin')
                             <div>
                                 <label class="label">Staff ID</label>
-                                <input class="input" name="staff_id" value="{{ old('staff_id', 'RC-44920') }}" placeholder="E.g. RC-44920">
+                                <input class="input" name="staff_id" value="{{ old('staff_id') }}" placeholder="E.g. RC-44920">
                             </div>
                             <div>
                                 <label class="label">Secure Admin Password</label>
@@ -91,9 +91,8 @@
                             Remember this device
                         </label>
 
-                        <button class="btn-primary w-full py-[14px] text-sm" type="submit">
-                            {{ $portal === 'admin' ? 'Verify Admin Credentials' : 'Access Portal' }}
-                            <span>login</span>
+                        <button class="btn-primary login-submit w-full py-[14px] text-sm" type="submit">
+                            {{ $portal === 'admin' ? 'Verify Admin Credentials' : 'Access Portal Login' }}
                         </button>
                     </form>
 

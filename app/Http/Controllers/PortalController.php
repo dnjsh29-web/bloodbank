@@ -710,6 +710,13 @@ class PortalController extends Controller
             $data[$key] = $this->supabase->safeSelect($token, $table, $query);
         }
 
+        if (in_array($active, ['reports', 'donor-records'], true)) {
+            $data['donors'] = $this->attachLatestAppointmentForms(
+                $data['donors'],
+                $data['appointments']
+            );
+        }
+
         return $data;
     }
 
@@ -725,9 +732,11 @@ class PortalController extends Controller
             ],
             'reports' => [
                 'donors' => ['donors', ['order' => 'created_at.desc', 'limit' => 25]],
+                'appointments' => ['appointments', ['order' => 'created_at.desc', 'limit' => 100]],
             ],
             'donor-records' => [
                 'donors' => ['donors', ['order' => 'created_at.desc', 'limit' => 50]],
+                'appointments' => ['appointments', ['order' => 'created_at.desc', 'limit' => 100]],
             ],
             'inventory' => [
                 'inventory' => ['inventory_units', ['order' => 'created_at.desc', 'limit' => 100]],
@@ -746,6 +755,51 @@ class PortalController extends Controller
             ],
             default => [],
         };
+    }
+
+    private function attachLatestAppointmentForms(array $donors, array $appointments): array
+    {
+        $appointmentsByName = collect($appointments)
+            ->filter(fn (array $appointment): bool => filled($appointment['donor_full_name'] ?? null))
+            ->groupBy(fn (array $appointment): string => Str::lower(trim((string) $appointment['donor_full_name'])));
+
+        return collect($donors)
+            ->map(function (array $donor) use ($appointmentsByName): array {
+                $name = Str::lower(trim((string) ($donor['full_name'] ?? $donor['name'] ?? '')));
+                $appointment = $name === '' ? null : $appointmentsByName->get($name)?->first();
+
+                if (! is_array($appointment)) {
+                    return $donor;
+                }
+
+                $payload = is_array($appointment['form_payload'] ?? null)
+                    ? $appointment['form_payload']
+                    : [];
+                $donorForm = is_array($payload['donor_form'] ?? null)
+                    ? $payload['donor_form']
+                    : [];
+                $screening = is_array($appointment['eligibility_answers'] ?? null)
+                    ? $appointment['eligibility_answers']
+                    : [];
+
+                return [
+                    ...$donor,
+                    'form_payload' => $payload,
+                    'registration_details' => [
+                        ...(is_array($donor['registration_details'] ?? null) ? $donor['registration_details'] : []),
+                        'age' => $donorForm['age'] ?? $appointment['donor_age'] ?? $donor['age'] ?? null,
+                        'weight' => $donorForm['weight_kg'] ?? $appointment['donor_weight_kg'] ?? $donor['weight'] ?? null,
+                        'address' => $donorForm['address'] ?? $appointment['donor_address'] ?? $donor['address'] ?? null,
+                        'last_donation_date' => $donorForm['last_donation_date'] ?? $appointment['donor_last_donation_date'] ?? null,
+                    ],
+                    'screening_details' => [
+                        ...(is_array($donor['screening_details'] ?? null) ? $donor['screening_details'] : []),
+                        ...$screening,
+                    ],
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     private function notificationState(Request $request, string $token): array
