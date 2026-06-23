@@ -220,12 +220,18 @@ function initializeDynamicWidgets() {
   initAutoDismiss();
   initLoginCarousel();
   initScheduleLeafletMaps();
+  initAdminLeafletMaps();
   initScheduleWizard();
   initReportFilters();
   initNotificationFilters();
   initNotificationDrawer();
+  initInventoryFilters();
   syncActiveTabInputs();
   refreshIcons();
+
+  if (panelName === 'map') {
+    window.setTimeout(() => initAdminLeafletMaps(), 60);
+  }
 }
 
 function initAutoDismiss() {
@@ -483,6 +489,12 @@ function normalizeScheduleCenter(center = {}) {
   };
 }
 
+function escapeMapPopup(value) {
+  const node = document.createElement('span');
+  node.textContent = String(value ?? '');
+  return node.innerHTML;
+}
+
 function scheduleCentersFor(mapElement) {
   const centers = parsedDataset(mapElement, 'centers', fallbackScheduleCenters());
   return (Array.isArray(centers) && centers.length > 0 ? centers : fallbackScheduleCenters())
@@ -611,6 +623,96 @@ async function initScheduleLeafletMaps() {
 
     selectScheduleCenter(wizard, selected, { pan: false });
     invalidateScheduleMap(wizard);
+  });
+}
+
+function adminCentersFor(mapElement) {
+  const centers = parsedDataset(mapElement, 'adminLeafletCenters', fallbackScheduleCenters());
+  return (Array.isArray(centers) && centers.length > 0 ? centers : fallbackScheduleCenters())
+    .map(normalizeScheduleCenter)
+    .filter((center) => Number.isFinite(center.lat) && Number.isFinite(center.lng));
+}
+
+function updateAdminMapSelection(mapElement, center) {
+  const frame = mapElement.closest('.admin-map-frame');
+  if (!frame || !center) {
+    return;
+  }
+
+  frame.querySelector('[data-admin-map-name]')?.replaceChildren(center.name);
+  frame.querySelector('[data-admin-map-address]')?.replaceChildren(center.address);
+  frame.querySelector('[data-admin-map-type]')?.replaceChildren(center.type);
+}
+
+async function initAdminLeafletMaps() {
+  const maps = [...document.querySelectorAll('[data-admin-leaflet-map]')];
+  if (maps.length === 0) {
+    return;
+  }
+
+  const pending = maps.filter((mapElement) => mapElement.dataset.adminLeafletReady !== 'true' && mapElement.dataset.adminLeafletReady !== 'loading');
+  maps.filter((mapElement) => mapElement.dataset.adminLeafletReady === 'true').forEach((mapElement) => {
+    window.setTimeout(() => mapElement._adminLeaflet?.map?.invalidateSize(), 80);
+  });
+  if (pending.length === 0) {
+    return;
+  }
+
+  pending.forEach((mapElement) => {
+    mapElement.dataset.adminLeafletReady = 'loading';
+  });
+
+  const L = await import('leaflet');
+
+  pending.forEach((mapElement) => {
+    if (!mapElement.isConnected) {
+      return;
+    }
+
+    const centers = adminCentersFor(mapElement);
+    if (centers.length === 0) {
+      delete mapElement.dataset.adminLeafletReady;
+      return;
+    }
+
+    const preferred = centers.find((center) => center.id === 'CTR-SR-LAGUNA') || centers[0];
+    const map = L.map(mapElement, { zoomControl: true, scrollWheelZoom: true }).setView([preferred.lat, preferred.lng], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19,
+    }).addTo(map);
+
+    const markers = [];
+    centers.forEach((center) => {
+      const marker = L.circleMarker([center.lat, center.lng], {
+        radius: center.id === preferred.id ? 12 : 8,
+        color: '#8b0000',
+        fillColor: '#e60000',
+        fillOpacity: 0.85,
+        weight: 2,
+      })
+        .addTo(map)
+        .bindPopup(`<strong>${escapeMapPopup(center.name)}</strong><br>${escapeMapPopup(center.address)}`);
+
+      marker.on('click', () => {
+        markers.forEach(({ marker: otherMarker, center: otherCenter }) => {
+          const selected = otherCenter.id === center.id;
+          otherMarker.setStyle({ radius: selected ? 12 : 8, weight: selected ? 3 : 2, fillOpacity: selected ? 0.92 : 0.72 });
+        });
+        updateAdminMapSelection(mapElement, center);
+        marker.openPopup();
+      });
+      markers.push({ marker, center });
+    });
+
+    if (centers.length > 1) {
+      map.fitBounds(centers.map((center) => [center.lat, center.lng]), { padding: [36, 36], maxZoom: 13 });
+    }
+
+    mapElement._adminLeaflet = { map, markers };
+    mapElement.dataset.adminLeafletReady = 'true';
+    updateAdminMapSelection(mapElement, preferred);
+    window.setTimeout(() => map.invalidateSize(), 80);
   });
 }
 
@@ -876,8 +978,20 @@ function refreshAllNotificationCounts() {
 
 function refreshAllNotificationFilters() {
   document.querySelectorAll('[data-notification-center]').forEach((container) => {
-    applyNotificationFilter(container.dataset.notificationFilter || 'all', container);
+    applyNotificationFilter(container.dataset.notificationFilter || 'all', container, {
+      selectedItem: container.querySelector('[data-notification-item].is-selected:not([hidden])'),
+    });
   });
+}
+
+function showNotificationError(container, message = '') {
+  const element = container?.querySelector('[data-notification-error]');
+  if (!element) {
+    return;
+  }
+
+  element.hidden = message === '';
+  element.replaceChildren(message);
 }
 
 function setNotificationReadState(item, read) {
@@ -916,17 +1030,33 @@ function setMatchingNotificationReadState(notificationId, read) {
   return items;
 }
 
+function formBodyForPayload(payload = {}) {
+  const body = new URLSearchParams();
+  Object.entries(payload).forEach(([key, value]) => {
+    if (Array.isArray(value)) {
+      value.forEach((item) => body.append(`${key}[]`, item));
+      return;
+    }
+
+    if (value !== undefined && value !== null) {
+      body.append(key, value);
+    }
+  });
+
+  return body;
+}
+
 async function postNotificationJson(url, payload) {
   const response = await fetch(url, {
     method: 'POST',
     credentials: 'same-origin',
     headers: {
       'Accept': 'application/json',
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
       'X-CSRF-TOKEN': csrfToken(),
       'X-Requested-With': 'XMLHttpRequest',
     },
-    body: JSON.stringify(payload),
+    body: formBodyForPayload(payload),
   });
 
   if (!response.ok) {
@@ -950,6 +1080,7 @@ async function markNotificationItemRead(item) {
     return;
   }
 
+  showNotificationError(container);
   setMatchingNotificationReadState(notificationId, true);
   refreshAllNotificationCounts();
   refreshAllNotificationFilters();
@@ -966,6 +1097,7 @@ async function markNotificationItemRead(item) {
     setMatchingNotificationReadState(notificationId, false);
     refreshAllNotificationCounts();
     refreshAllNotificationFilters();
+    showNotificationError(container, 'Could not save this read status. Please try again.');
     console.error(error);
   }
 }
@@ -985,6 +1117,7 @@ async function markVisibleNotificationsRead(container) {
   }
 
   ids.forEach((notificationId) => setMatchingNotificationReadState(notificationId, true));
+  showNotificationError(container);
   refreshAllNotificationCounts();
   refreshAllNotificationFilters();
 
@@ -997,11 +1130,12 @@ async function markVisibleNotificationsRead(container) {
     ids.forEach((notificationId) => setMatchingNotificationReadState(notificationId, false));
     refreshAllNotificationCounts();
     refreshAllNotificationFilters();
+    showNotificationError(container, 'Could not mark these notifications as read. Please try again.');
     console.error(error);
   }
 }
 
-function applyNotificationFilter(filter, container = document.querySelector('[data-notification-center]')) {
+function applyNotificationFilter(filter, container = document.querySelector('[data-notification-center]'), { selectedItem = null } = {}) {
   if (!container) {
     return;
   }
@@ -1018,7 +1152,6 @@ function applyNotificationFilter(filter, container = document.querySelector('[da
     const tags = (item.dataset.noteFilters || '').split(',');
     const matches = filter === 'all' || tags.includes(filter);
     item.hidden = !matches;
-    item.classList.toggle('is-selected', false);
     if (matches) {
       visibleCount += 1;
     }
@@ -1032,9 +1165,13 @@ function applyNotificationFilter(filter, container = document.querySelector('[da
     empty.hidden = items.length === 0 || visibleCount > 0;
   }
 
-  if (firstVisible) {
-    firstVisible.classList.add('is-selected');
-    updateNotificationDetail(firstVisible);
+  const currentSelection = selectedItem && !selectedItem.hidden
+    ? selectedItem
+    : container.querySelector('[data-notification-item].is-selected:not([hidden])');
+  const nextSelection = currentSelection || firstVisible;
+  items.forEach((item) => item.classList.toggle('is-selected', item === nextSelection));
+  if (nextSelection) {
+    updateNotificationDetail(nextSelection);
   }
 
   updateNotificationCounts(container);
@@ -1124,13 +1261,150 @@ function initNotificationDrawer() {
   closeNotificationDrawer();
 }
 
+function applyInventoryFilters(workspace) {
+  if (!workspace) {
+    return;
+  }
+
+  const search = (workspace.querySelector('[data-inventory-search]')?.value || '').trim().toLowerCase();
+  const blood = workspace.querySelector('[data-inventory-blood-filter]')?.value || 'all';
+  const status = workspace.querySelector('[data-inventory-status-filter]')?.value || 'all';
+  const sort = workspace.querySelector('[data-inventory-sort-filter]')?.value || 'date-desc';
+  const body = workspace.querySelector('[data-inventory-table-body]');
+  const empty = workspace.querySelector('[data-inventory-empty]');
+  const rows = [...workspace.querySelectorAll('[data-inventory-row]')];
+
+  const visibleRows = rows.filter((row) => {
+    const haystack = row.textContent.toLowerCase();
+    const matchesSearch = search === '' || haystack.includes(search);
+    const matchesBlood = blood === 'all' || row.dataset.inventoryBlood === blood;
+    const matchesStatus = status === 'all' || row.dataset.inventoryStatus === status;
+    row.hidden = !(matchesSearch && matchesBlood && matchesStatus);
+    return !row.hidden;
+  });
+
+  visibleRows.sort((left, right) => {
+    if (sort === 'alpha-asc' || sort === 'alpha-desc') {
+      const result = (left.dataset.inventorySort || '').localeCompare(right.dataset.inventorySort || '');
+      return sort === 'alpha-asc' ? result : -result;
+    }
+    const result = Number(left.dataset.inventoryDate || 0) - Number(right.dataset.inventoryDate || 0);
+    return sort === 'date-asc' ? result : -result;
+  });
+
+  visibleRows.forEach((row) => body?.insertBefore(row, empty || null));
+  if (empty) {
+    empty.hidden = visibleRows.length !== 0;
+  }
+}
+
+function closeInventoryFilters(except = null) {
+  document.querySelectorAll('[data-inventory-filter-menu]').forEach((menu) => {
+    if (menu !== except) {
+      menu.hidden = true;
+      menu.closest('.inventory-filter-wrap')?.querySelector('[data-inventory-filter-toggle]')?.setAttribute('aria-expanded', 'false');
+    }
+  });
+}
+
+function initInventoryFilters() {
+  document.querySelectorAll('[data-inventory-workspace]').forEach((workspace) => {
+    if (workspace.dataset.inventoryReady === 'true') {
+      return;
+    }
+    workspace.dataset.inventoryReady = 'true';
+    applyInventoryFilters(workspace);
+  });
+}
+
+async function openNewDonation(action) {
+  const inventoryTab = document.querySelector('[data-portal-tab="inventory"]');
+  if (!inventoryTab) {
+    return;
+  }
+
+  await loadPortalPanel(inventoryTab, { push: true });
+  window.setTimeout(() => openModal(document.querySelector('#add-entry-modal')), 0);
+}
+
+function lockModalPageScroll() {
+  const portalMain = document.querySelector('.portal-main');
+
+  if (!document.documentElement.dataset.modalLockCount) {
+    document.documentElement.dataset.modalLockCount = '0';
+  }
+
+  const lockCount = Number(document.documentElement.dataset.modalLockCount);
+  document.documentElement.dataset.modalLockCount = String(lockCount + 1);
+
+  if (lockCount > 0) {
+    return;
+  }
+
+  document.documentElement.dataset.modalScrollTop = String(portalMain?.scrollTop || window.scrollY || 0);
+  document.documentElement.classList.add('has-modal-open');
+  document.body.classList.add('has-modal-open');
+}
+
+function unlockModalPageScroll() {
+  const lockCount = Number(document.documentElement.dataset.modalLockCount || 0);
+  const nextCount = Math.max(0, lockCount - 1);
+  document.documentElement.dataset.modalLockCount = String(nextCount);
+
+  if (nextCount > 0 || document.querySelector('.modal-shell.is-open')) {
+    return;
+  }
+
+  const portalMain = document.querySelector('.portal-main');
+  const scrollTop = Number(document.documentElement.dataset.modalScrollTop || 0);
+  document.documentElement.classList.remove('has-modal-open');
+  document.body.classList.remove('has-modal-open');
+  delete document.documentElement.dataset.modalScrollTop;
+  delete document.documentElement.dataset.modalLockCount;
+
+  if (portalMain) {
+    portalMain.scrollTop = scrollTop;
+  }
+}
+
+function mountModalForViewport(modal) {
+  if (!modal || modal.parentElement === document.body) {
+    return;
+  }
+
+  const placeholder = document.createComment(`modal:${modal.id || 'anonymous'}`);
+  modal.parentNode?.insertBefore(placeholder, modal);
+  modal._modalPlaceholder = placeholder;
+  document.body.appendChild(modal);
+}
+
+function restoreModalMount(modal) {
+  const placeholder = modal?._modalPlaceholder;
+
+  if (!modal || !placeholder) {
+    return;
+  }
+
+  if (placeholder.parentNode) {
+    placeholder.parentNode.insertBefore(modal, placeholder);
+    placeholder.remove();
+  }
+
+  delete modal._modalPlaceholder;
+}
+
 function openModal(modal) {
   if (!modal) {
     return;
   }
+
+  const wasOpen = modal.classList.contains('is-open');
+  mountModalForViewport(modal);
   modal.hidden = false;
   modal.classList.add('is-open');
-  document.documentElement.classList.add('has-modal-open');
+  if (!wasOpen) {
+    lockModalPageScroll();
+  }
   refreshIcons();
   modal.querySelector('input, select, textarea, button')?.focus({ preventScroll: true });
 }
@@ -1139,10 +1413,12 @@ function closeModal(modal) {
   if (!modal) {
     return;
   }
+  const wasOpen = modal.classList.contains('is-open');
   modal.classList.remove('is-open');
   modal.hidden = true;
-  if (!document.querySelector('.modal-shell.is-open')) {
-    document.documentElement.classList.remove('has-modal-open');
+  restoreModalMount(modal);
+  if (wasOpen) {
+    unlockModalPageScroll();
   }
 }
 
@@ -1269,6 +1545,11 @@ document.addEventListener('turbo:before-cache', () => {
     delete mapElement._scheduleLeaflet;
     delete mapElement.dataset.leafletReady;
   });
+  document.querySelectorAll('[data-admin-leaflet-map]').forEach((mapElement) => {
+    mapElement._adminLeaflet?.map?.remove();
+    delete mapElement._adminLeaflet;
+    delete mapElement.dataset.adminLeafletReady;
+  });
   document.querySelectorAll('[data-login-carousel]').forEach((carousel) => {
     window.clearInterval(carousel._carouselTimer);
     delete carousel.dataset.carouselReady;
@@ -1276,12 +1557,50 @@ document.addEventListener('turbo:before-cache', () => {
   document.querySelectorAll('[data-report-dashboard]').forEach((container) => delete container.dataset.reportReady);
   document.querySelectorAll('[data-notification-center]').forEach((container) => delete container.dataset.notificationReady);
   document.querySelectorAll('[data-notification-drawer]').forEach((drawer) => delete drawer.dataset.drawerReady);
+  document.querySelectorAll('[data-inventory-workspace]').forEach((workspace) => delete workspace.dataset.inventoryReady);
   closeNotificationDrawer();
   closeModal(document.querySelector('.modal-shell.is-open'));
   hideTooltip();
 });
 
 document.addEventListener('click', (event) => {
+  const newDonation = event.target.closest('[data-new-donation]');
+  if (newDonation) {
+    event.preventDefault();
+    openNewDonation(newDonation);
+    return;
+  }
+
+  const inventoryFilterToggle = event.target.closest('[data-inventory-filter-toggle]');
+  if (inventoryFilterToggle) {
+    const menu = inventoryFilterToggle.closest('.inventory-filter-wrap')?.querySelector('[data-inventory-filter-menu]');
+    if (menu) {
+      const nextOpen = menu.hidden;
+      closeInventoryFilters(nextOpen ? menu : null);
+      menu.hidden = !nextOpen;
+      inventoryFilterToggle.setAttribute('aria-expanded', String(nextOpen));
+      refreshIcons();
+    }
+    return;
+  }
+
+  const inventoryReset = event.target.closest('[data-inventory-filter-reset]');
+  if (inventoryReset) {
+    const workspace = inventoryReset.closest('[data-inventory-workspace]');
+    if (workspace) {
+      workspace.querySelector('[data-inventory-search]').value = '';
+      workspace.querySelector('[data-inventory-blood-filter]').value = 'all';
+      workspace.querySelector('[data-inventory-status-filter]').value = 'all';
+      workspace.querySelector('[data-inventory-sort-filter]').value = 'date-desc';
+      applyInventoryFilters(workspace);
+    }
+    return;
+  }
+
+  if (!event.target.closest('.inventory-filter-wrap')) {
+    closeInventoryFilters();
+  }
+
   const scheduleReset = event.target.closest('[data-schedule-reset]');
   if (scheduleReset) {
     const confirmed = scheduleReset.closest('.schedule-confirmed');
@@ -1446,6 +1765,7 @@ document.addEventListener('click', (event) => {
     const container = notificationItem.closest('[data-notification-center]');
     container?.querySelectorAll('[data-notification-item]').forEach((item) => item.classList.remove('is-selected'));
     notificationItem.classList.add('is-selected');
+    showNotificationError(container);
     updateNotificationDetail(notificationItem);
     markNotificationItemRead(notificationItem);
     return;
@@ -1487,6 +1807,12 @@ document.addEventListener('click', (event) => {
 });
 
 document.addEventListener('change', (event) => {
+  const inventoryControl = event.target.closest('[data-inventory-blood-filter], [data-inventory-status-filter], [data-inventory-sort-filter]');
+  if (inventoryControl) {
+    applyInventoryFilters(inventoryControl.closest('[data-inventory-workspace]'));
+    return;
+  }
+
   const centerSelect = event.target.closest('[data-schedule-center-select]');
   if (centerSelect) {
     const wizard = centerSelect.closest('[data-schedule-wizard]');
@@ -1507,6 +1833,13 @@ document.addEventListener('change', (event) => {
   const dateInput = event.target.closest('[data-schedule-date-input]');
   if (dateInput) {
     updateScheduleReview(dateInput.closest('[data-schedule-wizard]'));
+  }
+});
+
+document.addEventListener('input', (event) => {
+  const inventorySearch = event.target.closest('[data-inventory-search]');
+  if (inventorySearch) {
+    applyInventoryFilters(inventorySearch.closest('[data-inventory-workspace]'));
   }
 });
 

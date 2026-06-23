@@ -41,7 +41,7 @@
         <div class="sidebar-subtitle">{{ $isDonor ? (($profile['blood_type'] ?? 'Type O Negative').' Donor') : 'Blood Bank Management' }}</div>
     </div>
 
-    <a class="btn-primary mb-4 w-full" href="{{ $actionHref }}" data-portal-tab="{{ $actionKey }}" data-panel-url="{{ $panelRoute($actionKey) }}" data-title="{{ $isDonor ? 'Schedule' : 'Blood Inventory' }}">
+    <a class="btn-primary mb-4 w-full" href="{{ $actionHref }}" data-portal-tab="{{ $actionKey }}" data-panel-url="{{ $panelRoute($actionKey) }}" data-title="{{ $isDonor ? 'Schedule' : 'Blood Inventory' }}" @unless ($isDonor) data-new-donation @endunless>
         <i data-lucide="plus" class="icon"></i>
         <span>{{ $actionText }}</span>
     </a>
@@ -65,16 +65,16 @@
 </aside>
 
 <nav class="mobile-nav md:hidden">
-    <div class="mb-2 flex items-center justify-between">
+    <div class="mobile-nav-brand">
         <div>
-            <div class="text-xl font-extrabold text-red-700">{{ $isDonor ? 'RedCross Blood Bank' : 'RedCross Admin' }}</div>
+            <div class="mobile-nav-title">{{ $isDonor ? 'RedCross Blood Bank' : 'RedCross Admin' }}</div>
             <div class="sidebar-subtitle p-0">{{ $isDonor ? (($profile['blood_type'] ?? 'Type O Negative').' Donor') : 'Blood Bank Management' }}</div>
         </div>
-        <a class="btn-primary px-3 py-2" href="{{ $actionHref }}" data-portal-tab="{{ $actionKey }}" data-panel-url="{{ $panelRoute($actionKey) }}" data-title="{{ $isDonor ? 'Schedule' : 'Blood Inventory' }}">
+        <a class="btn-primary mobile-nav-action" href="{{ $actionHref }}" data-portal-tab="{{ $actionKey }}" data-panel-url="{{ $panelRoute($actionKey) }}" data-title="{{ $isDonor ? 'Schedule' : 'Blood Inventory' }}" @unless ($isDonor) data-new-donation @endunless>
             <i data-lucide="plus" class="icon"></i>
         </a>
     </div>
-    <div class="grid gap-1 sm:grid-cols-2">
+    <div class="mobile-nav-grid">
         @foreach ($items as [$label, $href, $key, $icon])
             <a class="sidebar-link {{ $activeKey === $key ? 'is-active' : '' }}" href="{{ $shellHref }}#{{ $key }}" data-portal-tab="{{ $key }}" data-panel-url="{{ $panelRoute($key) }}" data-title="{{ $label }}">
                 <i data-lucide="{{ $icon }}" class="sidebar-icon"></i>

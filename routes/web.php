@@ -40,6 +40,7 @@ Route::middleware(['session.auth', 'role:donor'])->group(function (): void {
 Route::middleware(['session.auth', 'role:admin,super_admin'])->group(function (): void {
     Route::get('/admin/panel/{section}', [PortalController::class, 'adminPanel'])->name('admin.panel');
     Route::get('/admin/{section?}', [PortalController::class, 'admin'])->name('admin.section');
+    Route::post('/account-profile', [PortalController::class, 'updateStaffProfile'])->name('staff.profile.save');
     Route::post('/admin/donors', [PortalController::class, 'storeDonor'])->name('admin.donors.store');
     Route::post('/admin/inventory', [PortalController::class, 'storeInventory'])->name('admin.inventory.store');
     Route::post('/admin/campaigns', [PortalController::class, 'storeCampaign'])->name('admin.campaigns.store');

@@ -115,6 +115,51 @@
     $notificationRows = collect($notifications)->take(25)->values()->all();
     $adminUnreadCount = collect($notificationRows)->where('is_read', false)->count();
     $notificationReadUrlTemplate = route('notifications.read', ['notification' => '__NOTIFICATION_ID__']);
+
+    $mapFallback = [[
+        'id' => 'CTR-SR-LAGUNA',
+        'name' => 'PRC Laguna Chapter - Santa Rosa Branch',
+        'center_type' => 'Santa Rosa Red Cross',
+        'address' => 'Rotary Lane, Brgy. Tagapo, City of Santa Rosa, Laguna',
+        'latitude' => 14.31554,
+        'longitude' => 121.11104,
+    ]];
+    $mapCenters = collect($centers ?? [])
+        ->map(fn ($center) => [
+            'id' => $center['id'] ?? 'CTR-SR-LAGUNA',
+            'name' => $center['name'] ?? 'PRC Laguna Chapter - Santa Rosa Branch',
+            'type' => $center['center_type'] ?? $center['type'] ?? 'Donation Center',
+            'address' => $center['address'] ?? 'Address not provided',
+            'lat' => (float) ($center['latitude'] ?? $center['lat'] ?? 0),
+            'lng' => (float) ($center['longitude'] ?? $center['lng'] ?? 0),
+        ])
+        ->filter(fn ($center) => $center['lat'] !== 0.0 && $center['lng'] !== 0.0)
+        ->values();
+    if ($mapCenters->isEmpty()) {
+        $mapCenters = collect($mapFallback)->map(fn ($center) => [
+            'id' => $center['id'],
+            'name' => $center['name'],
+            'type' => $center['center_type'],
+            'address' => $center['address'],
+            'lat' => $center['latitude'],
+            'lng' => $center['longitude'],
+        ]);
+    }
+
+    $fallbackInventoryRows = [
+        ['blood_type' => 'O-', 'component_type' => 'Whole Blood', 'unit_code' => '#88219-BC', 'collection_date' => '2024-10-12', 'status' => 'Expiring Soon'],
+        ['blood_type' => 'A+', 'component_type' => 'Platelets', 'unit_code' => '#44102-XY', 'collection_date' => '2024-10-20', 'status' => 'Available'],
+        ['blood_type' => 'B+', 'component_type' => 'Plasma', 'unit_code' => '#11293-ZZ', 'collection_date' => '2024-10-18', 'status' => 'Available'],
+    ];
+    $inventoryRows = collect($inventory)->isNotEmpty() ? collect($inventory)->map(fn ($row) => [
+        'blood_type' => $row['blood_type'] ?? 'Unknown',
+        'component_type' => $row['component_type'] ?? 'Whole Blood',
+        'unit_code' => $row['unit_code'] ?? $row['id'] ?? 'Not provided',
+        'collection_date' => $row['collection_date'] ?? $row['created_at'] ?? null,
+        'status' => $row['status'] ?? 'Available',
+    ])->values() : collect($fallbackInventoryRows);
+    $inventoryStatuses = $inventoryRows->pluck('status')->filter()->unique()->sort()->values();
+
     $auditRows = collect($auditLogs)->isNotEmpty() ? collect($auditLogs)->take(4)->map(fn ($log) => [
         'time' => isset($log['created_at']) ? date('H:i:s', strtotime($log['created_at'])) : '14:22:15',
         'user' => $log['actor_name'] ?? 'System',
@@ -323,6 +368,7 @@
                     <button class="badge" type="button" data-notification-filter="unread">Unread (<span data-unread-count>{{ $adminUnreadCount }}</span>)</button>
                     <button class="badge" type="button" data-notification-filter="matching">Matching Alerts</button>
                 </div>
+                <p class="notification-error" data-notification-error role="status" hidden></p>
             </div>
             @forelse ($notificationRows as $note)
                 @php
@@ -393,8 +439,22 @@
         <h1 class="page-title">Donation Map</h1>
         <p class="page-subtitle">Live clinic and collection point coverage.</p>
     </header>
-    <section class="map-frame">
-        <div class="static-map" role="img" aria-label="OpenStreetMap view centered on Santa Rosa, Laguna donation coverage">
+    <section class="map-frame admin-map-frame">
+        <div
+            class="admin-leaflet-map"
+            data-admin-leaflet-map
+            data-admin-leaflet-centers="{{ e(json_encode($mapCenters->values()->all())) }}"
+            aria-label="Interactive OpenStreetMap view of donation centers"
+        ></div>
+        <div class="admin-map-selection" data-admin-map-selection>
+            <div>
+                <p class="eyebrow">Selected Center</p>
+                <h2 data-admin-map-name>{{ $mapCenters->first()['name'] }}</h2>
+                <p data-admin-map-address>{{ $mapCenters->first()['address'] }}</p>
+            </div>
+            <span class="badge" data-admin-map-type>{{ $mapCenters->first()['type'] }}</span>
+        </div>
+        <div class="static-map" hidden role="img" aria-label="OpenStreetMap view centered on Santa Rosa, Laguna donation coverage">
             <div class="static-map-tiles">
                 @foreach ([[1711,941],[1712,941],[1713,941],[1711,942],[1712,942],[1713,942],[1711,943],[1712,943],[1713,943]] as [$x, $y])
                     <img src="https://tile.openstreetmap.org/11/{{ $x }}/{{ $y }}.png" alt="" loading="lazy" referrerpolicy="no-referrer">
@@ -419,34 +479,36 @@
     </div>
     <div id="new-donor-modal" class="modal-shell" data-modal hidden>
         <div class="modal-backdrop" data-modal-backdrop></div>
-        <form class="modal-panel modal-panel-lg" method="post" action="{{ route('admin.donors.store') }}">
+        <form class="modal-panel modal-panel-lg modal-panel-form" method="post" action="{{ route('admin.donors.store') }}">
             @csrf
             <div class="modal-header">
                 <h2>Donor Registration</h2>
                 <button class="modal-close" type="button" data-modal-close aria-label="Close donor registration">x</button>
             </div>
-            <div class="form-grid">
-                <div><label class="label">Full Name</label><input class="input" name="full_name" placeholder="Juan Dela Cruz" required></div>
-                <div><label class="label">Age</label><input class="input" name="age" type="number" min="18" placeholder="Minimum 18 years"></div>
-                <div><label class="label">Blood Type</label><select class="select" name="blood_type" required><option value="">Select blood type</option>@foreach(['O+','O-','A+','A-','B+','B-','AB+','AB-'] as $type)<option>{{ $type }}</option>@endforeach</select></div>
-                <div><label class="label">Weight</label><input class="input" name="weight" type="number" min="40" placeholder="Minimum 50kg"></div>
-                <div><label class="label">Contact Number</label><input class="input" name="contact" placeholder="+63 912 345 6789" required></div>
-                <div><label class="label">Last Donation Date</label><input class="input" name="last_donation_label" type="date"></div>
-            </div>
-            <div class="mt-4"><label class="label">Residential Address</label><textarea class="textarea" name="address" placeholder="Enter full mailing address"></textarea></div>
-            <div class="mt-5">
-                <p class="label">Medical History</p>
-                <div class="medical-grid">
-                    <label><input type="checkbox" name="medical_flags[]" value="Diabetes"> Diabetes</label>
-                    <label><input type="checkbox" name="medical_flags[]" value="Hypertension"> Hypertension</label>
-                    <label><input type="checkbox" name="medical_risk" value="1"> Recent Surgery</label>
-                    <label><input type="checkbox" name="medical_flags[]" value="Allergies"> Allergies</label>
-                    <label><input type="checkbox" name="medical_flags[]" value="Anemia"> Anemia</label>
-                    <label><input type="checkbox" name="medical_flags[]" value="Infectious Disease"> Infectious Disease</label>
+            <div class="modal-body-scroll">
+                <div class="form-grid">
+                    <div><label class="label">Full Name</label><input class="input" name="full_name" placeholder="Juan Dela Cruz" required></div>
+                    <div><label class="label">Age</label><input class="input" name="age" type="number" min="18" placeholder="Minimum 18 years"></div>
+                    <div><label class="label">Blood Type</label><select class="select" name="blood_type" required><option value="">Select blood type</option>@foreach(['O+','O-','A+','A-','B+','B-','AB+','AB-'] as $type)<option>{{ $type }}</option>@endforeach</select></div>
+                    <div><label class="label">Weight</label><input class="input" name="weight" type="number" min="40" placeholder="Minimum 50kg"></div>
+                    <div><label class="label">Contact Number</label><input class="input" name="contact" placeholder="+63 912 345 6789" required></div>
+                    <div><label class="label">Last Donation Date</label><input class="input" name="last_donation_label" type="date"></div>
                 </div>
+                <div class="mt-4"><label class="label">Residential Address</label><textarea class="textarea" name="address" placeholder="Enter full mailing address"></textarea></div>
+                <div class="mt-5">
+                    <p class="label">Medical History</p>
+                    <div class="medical-grid">
+                        <label><input type="checkbox" name="medical_flags[]" value="Diabetes"> Diabetes</label>
+                        <label><input type="checkbox" name="medical_flags[]" value="Hypertension"> Hypertension</label>
+                        <label><input type="checkbox" name="medical_risk" value="1"> Recent Surgery</label>
+                        <label><input type="checkbox" name="medical_flags[]" value="Allergies"> Allergies</label>
+                        <label><input type="checkbox" name="medical_flags[]" value="Anemia"> Anemia</label>
+                        <label><input type="checkbox" name="medical_flags[]" value="Infectious Disease"> Infectious Disease</label>
+                    </div>
+                </div>
+                <div class="mt-4"><label class="label">Other Medical Details</label><textarea class="textarea" name="medical_notes" placeholder="Describe conditions or medications..."></textarea></div>
+                <label class="mt-5 flex items-center gap-3 text-sm text-stone-700"><input type="checkbox" required> I certify that the information provided is true and accurate.</label>
             </div>
-            <div class="mt-4"><label class="label">Other Medical Details</label><textarea class="textarea" name="medical_notes" placeholder="Describe conditions or medications..."></textarea></div>
-            <label class="mt-5 flex items-center gap-3 text-sm text-stone-700"><input type="checkbox" required> I certify that the information provided is true and accurate.</label>
             <div class="modal-actions">
                 <button class="btn-secondary" type="button" data-modal-close>Cancel</button>
                 <button class="btn-primary" type="submit">Submit Registration</button>
@@ -472,27 +534,29 @@
     </div>
     <div id="add-entry-modal" class="modal-shell" data-modal hidden>
         <div class="modal-backdrop" data-modal-backdrop></div>
-        <form class="modal-panel modal-panel-lg" method="post" action="{{ route('admin.inventory.store') }}">
+        <form class="modal-panel modal-panel-lg modal-panel-form" method="post" action="{{ route('admin.inventory.store') }}">
             @csrf
             <div class="modal-header">
                 <h2>Add Walk-in Donation</h2>
                 <button class="modal-close" type="button" data-modal-close aria-label="Close walk-in donation form">x</button>
             </div>
-            <div class="form-grid">
-                <div><label class="label">Donor Name</label><input class="input" name="donor_name" placeholder="Walk-in donor name" required></div>
-                <div><label class="label">Donor ID or Walk-in/New Donor</label><input class="input" name="donor_code" value="Walk-in/New Donor"></div>
-                <div><label class="label">Contact Number</label><input class="input" name="contact_number" placeholder="+63 912 345 6789"></div>
-                <div><label class="label">Blood Type</label><select class="select" name="blood_type" required><option value="">Select blood type</option>@foreach(['O+','O-','A+','A-','B+','B-','AB+','AB-'] as $type)<option>{{ $type }}</option>@endforeach</select></div>
-                <div><label class="label">Units Donated</label><input class="input" name="units" type="number" min="1" value="1"></div>
-                <div><label class="label">Donation Type / Component Type</label><select class="select" name="component_type" required><option value="">Select donation type / component type</option><option>Whole Blood</option><option>Platelets</option><option>Plasma</option></select></div>
-                <div><label class="label">Collection Date</label><input class="input" name="collection_date" type="date" required></div>
-                <div><label class="label">Collection Time</label><input class="input" name="collection_time" type="time" required></div>
-                <div><label class="label">Facility / Collection Site</label><input class="input" name="facility" value="PRC Laguna Chapter - Santa Rosa Branch" required></div>
-                <div><label class="label">Staff/Admin Name</label><input class="input" name="staff_name" value="{{ $profile['full_name'] ?? 'Alex Rivera' }}" required></div>
-                <div><label class="label">Screening Status</label><select class="select" name="screening_status"><option>Passed</option><option>Failed</option></select></div>
-                <div><label class="label">Eligibility Status</label><select class="select" name="eligibility_status"><option>Eligible</option><option>Deferred</option><option>Ineligible</option></select></div>
+            <div class="modal-body-scroll">
+                <div class="form-grid">
+                    <div><label class="label">Donor Name</label><input class="input" name="donor_name" placeholder="Walk-in donor name" required></div>
+                    <div><label class="label">Donor ID or Walk-in/New Donor</label><input class="input" name="donor_code" value="Walk-in/New Donor"></div>
+                    <div><label class="label">Contact Number</label><input class="input" name="contact_number" placeholder="+63 912 345 6789"></div>
+                    <div><label class="label">Blood Type</label><select class="select" name="blood_type" required><option value="">Select blood type</option>@foreach(['O+','O-','A+','A-','B+','B-','AB+','AB-'] as $type)<option>{{ $type }}</option>@endforeach</select></div>
+                    <div><label class="label">Units Donated</label><input class="input" name="units" type="number" min="1" value="1"></div>
+                    <div><label class="label">Donation Type / Component Type</label><select class="select" name="component_type" required><option value="">Select donation type / component type</option><option>Whole Blood</option><option>Platelets</option><option>Plasma</option></select></div>
+                    <div><label class="label">Collection Date</label><input class="input" name="collection_date" type="date" required></div>
+                    <div><label class="label">Collection Time</label><input class="input" name="collection_time" type="time" required></div>
+                    <div><label class="label">Facility / Collection Site</label><input class="input" name="facility" value="PRC Laguna Chapter - Santa Rosa Branch" required></div>
+                    <div><label class="label">Staff/Admin Name</label><input class="input" name="staff_name" value="{{ $profile['full_name'] ?? 'Alex Rivera' }}" required></div>
+                    <div><label class="label">Screening Status</label><select class="select" name="screening_status"><option>Passed</option><option>Failed</option></select></div>
+                    <div><label class="label">Eligibility Status</label><select class="select" name="eligibility_status"><option>Eligible</option><option>Deferred</option><option>Ineligible</option></select></div>
+                </div>
+                <div class="mt-4"><label class="label">Notes</label><textarea class="textarea" name="notes" placeholder="Donation notes..."></textarea></div>
             </div>
-            <div class="mt-4"><label class="label">Notes</label><textarea class="textarea" name="notes" placeholder="Donation notes..."></textarea></div>
             <div class="modal-actions">
                 <button class="btn-secondary" type="button" data-modal-close>Cancel</button>
                 <button class="btn-primary" type="submit">Save Entry</button>
@@ -528,7 +592,76 @@
         </aside>
     </section>
 
-    <section class="mt-7">
+    <section class="mt-7 inventory-workspace" data-inventory-workspace>
+        <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
+            <div>
+                <h2 class="section-title text-2xl">Blood Stock Detailed View</h2>
+                <p class="text-sm text-stone-600">Manage and monitor individual blood component units.</p>
+            </div>
+            <div class="inventory-toolbar">
+                <label class="search-pill block">
+                    <i data-lucide="search"></i>
+                    <input class="!w-[240px]" data-inventory-search placeholder="Search inventory..." aria-label="Search inventory">
+                </label>
+                <div class="inventory-filter-wrap">
+                    <button class="btn-primary" type="button" data-inventory-filter-toggle aria-expanded="false" aria-controls="inventory-filter-menu">
+                        <i data-lucide="sliders-horizontal"></i> Filter
+                    </button>
+                    <div id="inventory-filter-menu" class="inventory-filter-menu" data-inventory-filter-menu hidden>
+                        <label class="label" for="inventory-blood-filter">Blood Type</label>
+                        <select id="inventory-blood-filter" class="select" data-inventory-blood-filter>
+                            <option value="all">All Blood Types</option>
+                            @foreach ($bloodTypes as $type)<option value="{{ $type }}">{{ $type }}</option>@endforeach
+                        </select>
+                        <label class="label mt-4" for="inventory-status-filter">Availability</label>
+                        <select id="inventory-status-filter" class="select" data-inventory-status-filter>
+                            <option value="all">All Statuses</option>
+                            @foreach ($inventoryStatuses as $status)<option value="{{ $status }}">{{ $status }}</option>@endforeach
+                        </select>
+                        <label class="label mt-4" for="inventory-sort-filter">Sort Records</label>
+                        <select id="inventory-sort-filter" class="select" data-inventory-sort-filter>
+                            <option value="date-desc">Collection Date: Newest</option>
+                            <option value="date-asc">Collection Date: Oldest</option>
+                            <option value="alpha-asc">A-Z</option>
+                            <option value="alpha-desc">Z-A</option>
+                        </select>
+                        <button class="btn-outline mt-4 w-full" type="button" data-inventory-filter-reset>Reset Filters</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="card table-card">
+            <div class="table-wrap">
+                <table class="data-table">
+                    <thead><tr><th>Blood Type</th><th>Component</th><th>Unit ID</th><th>Collection Date</th><th>Status</th></tr></thead>
+                    <tbody data-inventory-table-body>
+                        @foreach ($inventoryRows as $row)
+                            @php
+                                $collectionTimestamp = !empty($row['collection_date']) ? strtotime((string) $row['collection_date']) : 0;
+                                $collectionLabel = $collectionTimestamp ? date('M d, Y', $collectionTimestamp) : 'Not provided';
+                            @endphp
+                            <tr
+                                data-inventory-row
+                                data-inventory-blood="{{ $row['blood_type'] }}"
+                                data-inventory-status="{{ $row['status'] }}"
+                                data-inventory-date="{{ $collectionTimestamp }}"
+                                data-inventory-sort="{{ strtolower($row['blood_type'].' '.$row['component_type'].' '.$row['unit_code']) }}"
+                            >
+                                <td class="font-bold">{{ $row['blood_type'] }}</td>
+                                <td>{{ $row['component_type'] }}</td>
+                                <td>{{ $row['unit_code'] }}</td>
+                                <td>{{ $collectionLabel }}</td>
+                                <td><span class="badge {{ strtolower($row['status']) === 'available' ? '' : 'status-warning' }}">{{ $row['status'] }}</span></td>
+                            </tr>
+                        @endforeach
+                        <tr data-inventory-empty hidden><td colspan="5">No inventory units match the current filters.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <section class="mt-7" hidden>
         <div class="mb-4 flex flex-wrap items-end justify-between gap-3"><div><h2 class="section-title text-2xl">Blood Stock Detailed View</h2><p class="text-sm text-stone-600">Manage and monitor individual blood component units.</p></div><div class="flex gap-3"><div class="search-pill block"><i data-lucide="search"></i><input class="!w-[240px]" placeholder="Search inventory..."></div><button class="btn-primary" type="button"><i data-lucide="filter"></i> Filter</button></div></div>
         <div class="card table-card"><div class="table-wrap"><table class="data-table"><thead><tr><th>Blood Type</th><th>Component</th><th>Unit ID</th><th>Collection Date</th><th>Status</th></tr></thead><tbody><tr><td class="font-bold">O-Negative</td><td>Whole Blood</td><td>#88219-BC</td><td>Oct 12, 2024</td><td><span class="badge">Expiring Soon</span></td></tr><tr><td class="font-bold">A-Positive</td><td>Platelets</td><td>#44102-XY</td><td>Oct 20, 2024</td><td><span class="badge">Available</span></td></tr><tr><td class="font-bold">B-Positive</td><td>Plasma</td><td>#11293-ZZ</td><td>Oct 18, 2024</td><td><span class="badge">Available</span></td></tr></tbody></table></div></div>
     </section>
@@ -612,6 +745,9 @@
             </div>
         @endforeach
     </section>
+
+@elseif ($section === 'profile')
+    @include('admin.sections.staff-profile')
 
 @elseif ($section === 'security')
     <div class="mb-7 flex flex-wrap items-start justify-between gap-4"><header><h1 class="page-title">Audit Logs &amp; Security</h1><p class="page-subtitle">Monitor system integrity and user activity.</p></header><div class="flex gap-3"><div class="search-pill block"><i data-lucide="search"></i><input class="!w-[220px]" placeholder="Search logs..."></div><a class="btn-primary" data-turbo="false" href="{{ route('reports.download', 'security') }}"><i data-lucide="download"></i> Export Report</a></div></div>

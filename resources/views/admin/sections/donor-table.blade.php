@@ -100,6 +100,7 @@
                 <button class="modal-close" type="button" data-modal-close aria-label="Close donor detail">x</button>
             </div>
 
+            <div class="donor-detail-body">
             <div class="detail-hero">
                 <div>
                     <span class="badge is-active">{{ $donor['blood_type'] ?? 'O-' }}</span>
@@ -150,6 +151,8 @@
                     <p class="empty-note">No submitted schedule form is linked to this donor yet.</p>
                 @endif
             </section>
+
+            </div>
 
             <div class="modal-actions">
                 <button class="btn-secondary" type="button" data-modal-close>Close</button>

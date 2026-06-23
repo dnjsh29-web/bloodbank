@@ -286,6 +286,32 @@ class PortalController extends Controller
         return $this->redirectToPortalTab($request, 'personal-info')->with('success', 'Personal information saved.');
     }
 
+    public function updateStaffProfile(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'full_name' => ['required', 'string', 'max:120'],
+            'phone' => ['nullable', 'string', 'max:40'],
+            'address' => ['nullable', 'string', 'max:250'],
+        ]);
+
+        $profile = $request->session()->get('profile', []);
+        $profileId = (string) ($profile['id'] ?? '');
+
+        if ($profileId === '') {
+            return back()->withErrors(['profile' => 'Your account profile is not available. Please sign in again.']);
+        }
+
+        $saved = $this->supabase->update($this->token($request), 'profiles', ['id' => "eq.{$profileId}"], [
+            ...$validated,
+            'updated_at' => now()->toISOString(),
+        ]);
+
+        $request->session()->put('profile', $saved[0] ?? array_replace($profile, $validated));
+
+        return $this->redirectToPortalTab($request, 'profile')
+            ->with('success', 'Account profile saved.');
+    }
+
     public function donorSecurity(Request $request): View
     {
         return view('donor.security', $this->payload($request, 'account-security'));
@@ -470,7 +496,7 @@ class PortalController extends Controller
 
     public function adminPanel(Request $request, string $section): View|RedirectResponse
     {
-        if (! in_array($section, ['reports', 'notifications', 'map', 'donor-records', 'inventory', 'campaigns', 'security'], true)) {
+        if (! in_array($section, ['reports', 'notifications', 'map', 'donor-records', 'inventory', 'campaigns', 'security', 'profile'], true)) {
             return redirect()->route('admin.section');
         }
 
@@ -494,7 +520,7 @@ class PortalController extends Controller
 
     public function superPanel(Request $request, string $section): View|RedirectResponse
     {
-        if (! in_array($section, ['overview', 'inventory', 'donor-records', 'security'], true)) {
+        if (! in_array($section, ['overview', 'inventory', 'donor-records', 'security', 'profile'], true)) {
             return redirect()->route('super.section');
         }
 
@@ -700,6 +726,7 @@ class PortalController extends Controller
             'inventory' => [],
             'donationEntries' => [],
             'campaigns' => [],
+            'centers' => [],
             'notifications' => $notificationState['notifications'],
             'notificationReads' => $notificationState['notificationReads'],
             'unreadNotificationCount' => $notificationState['unreadNotificationCount'],
@@ -744,6 +771,9 @@ class PortalController extends Controller
             ],
             'campaigns' => [
                 'campaigns' => ['campaigns', ['order' => 'created_at.desc', 'limit' => 20]],
+            ],
+            'map' => [
+                'centers' => ['donation_centers', ['order' => 'name.asc', 'limit' => 100]],
             ],
             'security' => [
                 'auditLogs' => ['audit_logs', ['order' => 'created_at.desc', 'limit' => 25]],

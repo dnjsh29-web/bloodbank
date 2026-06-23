@@ -8,8 +8,8 @@
         : ($portalName === 'super' ? route('super.panel', $key) : route('admin.panel', $key));
     $profileHref = $portalName === 'donor'
         ? $shellHref.'#personal-info'
-        : $shellHref.'#donor-records';
-    $profilePanel = $portalName === 'donor' ? 'personal-info' : 'donor-records';
+        : $shellHref.'#profile';
+    $profilePanel = $portalName === 'donor' ? 'personal-info' : 'profile';
     $settingsHref = $portalName === 'donor'
         ? $shellHref.'#account-security'
         : $shellHref.'#security';
@@ -41,14 +41,8 @@
         <a class="top-icon-btn" href="{{ $settingsHref }}" data-portal-tab="{{ $settingsPanel }}" data-panel-url="{{ $panelRoute($settingsPanel) }}" data-title="Account Security" aria-label="Open settings">
             <i data-lucide="settings"></i>
         </a>
-        <a class="top-icon-btn" href="{{ $profileHref }}" data-portal-tab="{{ $profilePanel }}" data-panel-url="{{ $panelRoute($profilePanel) }}" data-title="{{ $portalName === 'donor' ? 'Personal Info' : 'Donor Records' }}" aria-label="Open profile">
+        <a class="top-icon-btn" href="{{ $profileHref }}" data-portal-tab="{{ $profilePanel }}" data-panel-url="{{ $panelRoute($profilePanel) }}" data-title="{{ $portalName === 'donor' ? 'Personal Info' : 'My Profile' }}" aria-label="Open profile">
             <i data-lucide="user"></i>
         </a>
-        <form method="post" action="{{ route('logout') }}">
-            @csrf
-            <button class="top-icon-btn" type="submit" aria-label="Logout">
-                <i data-lucide="log-out"></i>
-            </button>
-        </form>
     </div>
 </header>
