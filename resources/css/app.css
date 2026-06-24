@@ -2850,6 +2850,122 @@ html.has-modal-open .sidebar {
     width: min(100%, 22rem);
   }
 
+  .badge {
+    max-width: 100%;
+    padding: 0.22rem 0.52rem;
+    font-size: 0.68rem;
+    line-height: 1.12;
+    overflow-wrap: normal;
+    text-align: center;
+    white-space: nowrap;
+    word-break: keep-all;
+  }
+
+  .data-table {
+    min-width: 40rem;
+    table-layout: fixed;
+  }
+
+  .data-table th,
+  .data-table td {
+    overflow-wrap: anywhere;
+    vertical-align: middle;
+  }
+
+  .data-table td:last-child,
+  .data-table th:last-child {
+    width: 7.25rem;
+  }
+
+  .data-table .btn-primary,
+  .data-table .btn-outline {
+    min-height: 2.25rem;
+    padding: 0.45rem 0.55rem;
+    font-size: 0.68rem;
+    line-height: 1.1;
+  }
+
+  .portal-panel > section.grid:has(.stock-card) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.65rem;
+  }
+
+  .stock-card {
+    min-height: 8.25rem;
+    padding: 0.75rem;
+  }
+
+  .stock-card .flex {
+    gap: 0.45rem;
+  }
+
+  .stock-card .badge {
+    align-self: flex-start;
+    font-size: 0.58rem;
+    padding: 0.22rem 0.42rem;
+  }
+
+  .stock-type {
+    font-size: 1rem;
+  }
+
+  .stock-units {
+    font-size: 1.65rem;
+  }
+
+  .stock-card .text-sm {
+    font-size: 0.68rem;
+  }
+
+  .quick-actions-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 0.5rem;
+  }
+
+  .quick-actions-grid form,
+  .security-quick-actions form {
+    min-width: 0;
+  }
+
+  .quick-actions-grid .btn-primary,
+  .quick-actions-grid .btn-outline,
+  .security-quick-actions .btn-primary,
+  .security-quick-actions .btn-outline {
+    width: 100%;
+    min-height: 2.65rem;
+    justify-content: center;
+    gap: 0.25rem;
+    padding: 0.45rem 0.35rem;
+    font-size: 0.62rem;
+    line-height: 1.1;
+    text-align: center;
+  }
+
+  .quick-actions-grid .btn-primary,
+  .quick-actions-grid .btn-outline {
+    flex-direction: column;
+  }
+
+  .quick-actions-grid .btn-primary svg,
+  .quick-actions-grid .btn-outline svg,
+  .security-quick-actions .btn-primary svg,
+  .security-quick-actions .btn-outline svg {
+    width: 0.95rem;
+    height: 0.95rem;
+    flex: 0 0 auto;
+  }
+
+  .security-quick-actions {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .security-quick-actions > * {
+    margin-top: 0 !important;
+    min-width: 0;
+  }
+
   .btn-primary,
   .btn-outline,
   .btn-secondary,
@@ -3125,6 +3241,88 @@ html.has-modal-open .sidebar {
   .topbar-actions .top-icon-btn {
     flex: 0 0 2rem;
   }
+
+  .badge,
+  .data-table .badge {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    word-break: keep-all;
+    overflow-wrap: normal;
+  }
+
+  .data-table td:last-child .btn-primary,
+  .data-table td:last-child .btn-outline {
+    width: 100%;
+    max-width: 6.75rem;
+  }
+
+  .data-table td:last-child .flex {
+    align-items: flex-start;
+  }
+
+  .portal-panel > section.grid:has(.stock-card) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.65rem;
+  }
+
+  .stock-card {
+    min-height: 8.1rem;
+    padding: 0.7rem;
+  }
+
+  .stock-card .mb-6 {
+    margin-bottom: 0.7rem;
+  }
+
+  .stock-card .mb-4 {
+    margin-bottom: 0.55rem;
+  }
+
+  .stock-type {
+    font-size: 1rem;
+    line-height: 1.1;
+  }
+
+  .stock-units {
+    font-size: 1.55rem;
+    line-height: 1;
+  }
+
+  .stock-card .text-sm {
+    font-size: 0.66rem;
+    line-height: 1.15;
+  }
+
+  .stock-card .progress {
+    height: 0.34rem;
+  }
+
+  .quick-actions-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 0.5rem;
+  }
+
+  .security-quick-actions {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .quick-actions-grid .btn-primary,
+  .quick-actions-grid .btn-outline,
+  .security-quick-actions .btn-primary,
+  .security-quick-actions .btn-outline {
+    min-height: 2.65rem;
+    padding: 0.42rem 0.34rem;
+    font-size: 0.62rem;
+    line-height: 1.08;
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: normal;
+  }
 }
 
 @media (max-width: 380px) {
@@ -3140,6 +3338,13 @@ html.has-modal-open .sidebar {
   .portal-panel > .mb-6.flex > div:last-child,
   .portal-panel > .mb-4.flex > div:last-child {
     flex-direction: column;
+  }
+
+  .quick-actions-grid .btn-primary,
+  .quick-actions-grid .btn-outline,
+  .security-quick-actions .btn-primary,
+  .security-quick-actions .btn-outline {
+    font-size: 0.58rem;
   }
 }
 
