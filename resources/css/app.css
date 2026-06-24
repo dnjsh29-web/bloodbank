@@ -1228,6 +1228,36 @@ button.top-icon-btn {
   background: #fff1f1;
 }
 
+.schedule-deferred-alert {
+  display: grid;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+  border: 1px solid #fecaca;
+  border-left: 0.35rem solid #c40000;
+  border-radius: 0.75rem;
+  background: #fff1f1;
+  color: #6f1d1b;
+  padding: 1rem 1.1rem;
+}
+
+.schedule-deferred-alert[hidden] {
+  display: none;
+}
+
+.schedule-deferred-alert strong {
+  color: #c40000;
+  font-size: 0.9rem;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.schedule-deferred-alert span {
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 .schedule-form-card {
   border: 1px solid rgb(254 202 202 / 1);
   border-radius: 0.75rem;

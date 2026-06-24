@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\SupabaseEmailRateLimitException;
 use App\Services\SupabaseAuthService;
 use App\Services\SupabaseRest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 use RuntimeException;
 
@@ -20,6 +23,7 @@ class AuthController extends Controller
     {
         return view('auth.login', [
             'portal' => $request->query('portal', 'donor'),
+            'emailConfirmationRequired' => $this->emailConfirmationRequired(),
         ]);
     }
 
@@ -60,6 +64,12 @@ class AuthController extends Controller
                 ->with('success', ucfirst(str_replace('_', ' ', (string) $profile['role'])).' credentials verified.');
         } catch (RuntimeException $error) {
             if ($this->isUnconfirmedEmailError($error->getMessage())) {
+                if (! $this->emailConfirmationRequired()) {
+                    return back()
+                        ->withInput($request->except('password'))
+                        ->withErrors(['email' => 'This account was created while email confirmation was enabled. Confirm it once, or create a new test account after disabling Confirm Email in Supabase.']);
+                }
+
                 return back()
                     ->withInput($request->except('password'))
                     ->with('unconfirmed_email', $email)
@@ -89,30 +99,76 @@ class AuthController extends Controller
             'medical_notes' => ['nullable', 'string', 'max:600'],
             'certify' => ['accepted'],
         ]);
+        $email = Str::lower(trim($validated['email']));
 
         try {
-            $session = $this->auth->signUp($validated['email'], $validated['password'], [
+            if ($this->emailConfirmationRequired() && $this->confirmationEmailCoolingDown($email)) {
+                return back()
+                    ->withInput($request->except(['password', 'password_confirmation']))
+                    ->withErrors(['email' => $this->confirmationCooldownMessage()]);
+            }
+
+            $session = $this->auth->signUp($email, $validated['password'], [
                 'full_name' => $validated['full_name'],
             ], route('login'));
 
             $token = (string) ($session['access_token'] ?? '');
             $user = $session['user'] ?? [];
+            $profile = null;
 
             if ($token && isset($user['id'])) {
-                $this->supabase->upsert($token, 'profiles', [[
+                $profiles = $this->supabase->upsert($token, 'profiles', [[
                     'id' => $user['id'],
                     'role' => 'donor',
                     'full_name' => $validated['full_name'],
-                    'email' => $validated['email'],
+                    'email' => $email,
                     'phone' => $validated['phone'] ?? null,
                     'address' => $validated['address'] ?? null,
                     'blood_type' => $validated['blood_type'] ?? null,
                 ]], 'id');
+
+                $profile = $profiles[0] ?? [
+                    'id' => $user['id'],
+                    'role' => 'donor',
+                    'full_name' => $validated['full_name'],
+                    'email' => $email,
+                    'phone' => $validated['phone'] ?? null,
+                    'address' => $validated['address'] ?? null,
+                    'blood_type' => $validated['blood_type'] ?? null,
+                ];
             }
 
+            if ($token !== '' && $profile !== null) {
+                $request->session()->regenerate();
+                $request->session()->put([
+                    'supabase.access_token' => $token,
+                    'supabase.refresh_token' => $session['refresh_token'] ?? null,
+                    'supabase.user' => $user,
+                    'profile' => $profile,
+                ]);
+
+                return redirect($this->homeForRole('donor'))
+                    ->with('success', 'Account created. You are now signed in.');
+            }
+
+            if (! $this->emailConfirmationRequired()) {
+                return redirect()
+                    ->route('login')
+                    ->withErrors(['email' => 'Supabase did not start a session for this registration. Confirm Email must be disabled in Supabase Authentication > Providers > Email, or sign in if this email already has an account.']);
+            }
+
+            $this->startConfirmationEmailCooldown($email);
+
             return redirect()->route('login')
-                ->with('unconfirmed_email', $validated['email'])
+                ->with('unconfirmed_email', $email)
                 ->with('success', 'Registration submitted. Check your email to confirm your account before signing in.');
+        } catch (SupabaseEmailRateLimitException) {
+            $this->startConfirmationEmailCooldown($email);
+
+            return redirect()
+                ->route('login')
+                ->with('unconfirmed_email', $email)
+                ->withErrors(['email' => $this->emailRateLimitMessage()]);
         } catch (RuntimeException $error) {
             return back()->withInput()->withErrors(['email' => $error->getMessage()]);
         }
@@ -121,18 +177,40 @@ class AuthController extends Controller
     public function resendConfirmation(Request $request): RedirectResponse
     {
         $validated = $request->validate(['email' => ['required', 'email']]);
+        $email = Str::lower(trim($validated['email']));
+
+        if (! $this->emailConfirmationRequired()) {
+            return redirect()
+                ->route('login')
+                ->with('success', 'Email confirmation is disabled for testing. Register or sign in directly.');
+        }
 
         try {
-            $this->auth->resendSignupConfirmation($validated['email'], route('login'));
+            if ($this->confirmationEmailCoolingDown($email)) {
+                return back()
+                    ->withInput(['email' => $email])
+                    ->with('unconfirmed_email', $email)
+                    ->withErrors(['email' => $this->confirmationCooldownMessage()]);
+            }
+
+            $this->auth->resendSignupConfirmation($email, route('login'));
+            $this->startConfirmationEmailCooldown($email);
 
             return back()
-                ->withInput($request->only('email'))
-                ->with('unconfirmed_email', $validated['email'])
+                ->withInput(['email' => $email])
+                ->with('unconfirmed_email', $email)
                 ->with('success', 'Confirmation email resent. Please check your inbox.');
+        } catch (SupabaseEmailRateLimitException) {
+            $this->startConfirmationEmailCooldown($email);
+
+            return back()
+                ->withInput(['email' => $email])
+                ->with('unconfirmed_email', $email)
+                ->withErrors(['email' => $this->emailRateLimitMessage()]);
         } catch (RuntimeException $error) {
             return back()
-                ->withInput($request->only('email'))
-                ->with('unconfirmed_email', $validated['email'])
+                ->withInput(['email' => $email])
+                ->with('unconfirmed_email', $email)
                 ->withErrors(['email' => $error->getMessage()]);
         }
     }
@@ -232,5 +310,44 @@ class AuthController extends Controller
     private function isUnconfirmedEmailError(string $message): bool
     {
         return str_contains(strtolower($message), 'email not confirmed');
+    }
+
+    private function confirmationEmailCoolingDown(string $email): bool
+    {
+        return Cache::has($this->confirmationCooldownKey($email));
+    }
+
+    private function startConfirmationEmailCooldown(string $email): void
+    {
+        Cache::put(
+            $this->confirmationCooldownKey($email),
+            true,
+            now()->addSeconds($this->confirmationCooldownSeconds()),
+        );
+    }
+
+    private function confirmationCooldownKey(string $email): string
+    {
+        return 'supabase:confirmation-email:'.hash('sha256', Str::lower(trim($email)));
+    }
+
+    private function confirmationCooldownSeconds(): int
+    {
+        return max(15, (int) config('services.supabase.confirmation_cooldown_seconds', 60));
+    }
+
+    private function emailConfirmationRequired(): bool
+    {
+        return (bool) config('services.supabase.email_confirmation_required', true);
+    }
+
+    private function confirmationCooldownMessage(): string
+    {
+        return 'A confirmation email was recently requested. Please wait a minute before trying again.';
+    }
+
+    private function emailRateLimitMessage(): string
+    {
+        return 'Confirmation email delivery is temporarily limited. Please wait a few minutes before trying again.';
     }
 }

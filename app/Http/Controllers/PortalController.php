@@ -60,9 +60,24 @@ class PortalController extends Controller
             'donation_center_id' => ['required', 'string'],
             'scheduled_date' => ['required', 'date'],
             'scheduled_time' => ['required', 'string'],
+            'fever' => ['nullable', 'boolean'],
+            'surgery' => ['nullable', 'boolean'],
+            'tattoo' => ['nullable', 'boolean'],
+            'antibiotics' => ['nullable', 'boolean'],
+            'infection_test' => ['nullable', 'boolean'],
             'hemoglobin' => ['nullable', 'string'],
             'blood_pressure' => ['nullable', 'string'],
         ]);
+
+        $riskAnswers = Arr::only($common, ['fever', 'surgery', 'tattoo', 'antibiotics', 'infection_test']);
+        if (collect($riskAnswers)->contains(fn ($answer): bool => filter_var($answer, FILTER_VALIDATE_BOOLEAN))) {
+            return $this->redirectToPortalTab($request, 'schedule')
+                ->withInput()
+                ->withErrors([
+                    'eligibility' => 'Deferred: one or more screening answers require staff review before you can continue with a donation booking.',
+                ]);
+        }
+
         $isBloodRequest = $common['service_type'] === 'Blood Request';
 
         if ($isBloodRequest) {

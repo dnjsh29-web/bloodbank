@@ -885,6 +885,38 @@ function selectScheduleCenter(wizard, center, { pan = true } = {}) {
   updateScheduleReview(wizard);
 }
 
+function scheduleRiskAnswers(wizard) {
+  return [...(wizard?.querySelectorAll('[data-schedule-risk-answer]') || [])];
+}
+
+function scheduleHasDeferringAnswer(wizard) {
+  return scheduleRiskAnswers(wizard).some((field) => field.checked);
+}
+
+function setScheduleDeferredMessage(wizard, visible) {
+  const alert = wizard?.querySelector('[data-schedule-deferred-alert]');
+  if (!alert) {
+    return;
+  }
+
+  alert.hidden = !visible;
+  alert.classList.toggle('is-visible', visible);
+}
+
+function guardScheduleEligibility(wizard) {
+  const isDeferred = scheduleHasDeferringAnswer(wizard);
+  setScheduleDeferredMessage(wizard, isDeferred);
+
+  if (isDeferred) {
+    wizard?.querySelector('[data-schedule-deferred-alert]')?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+    });
+  }
+
+  return !isDeferred;
+}
+
 function showScheduleStep(wizard, step) {
   const nextStep = Math.min(6, Math.max(1, Number(step) || 1));
   wizard.dataset.scheduleCurrentStep = String(nextStep);
@@ -915,6 +947,13 @@ function initScheduleWizard() {
     }
 
     wizard.dataset.scheduleReady = 'true';
+    scheduleRiskAnswers(wizard).forEach((field) => {
+      field.addEventListener('change', () => {
+        if (!scheduleHasDeferringAnswer(wizard)) {
+          setScheduleDeferredMessage(wizard, false);
+        }
+      });
+    });
     setScheduleService(wizard);
     showScheduleStep(wizard, Number(wizard.dataset.scheduleCurrentStep || 1));
   });
@@ -1737,7 +1776,12 @@ document.addEventListener('click', (event) => {
   const scheduleNext = event.target.closest('[data-schedule-next]');
   if (scheduleNext) {
     const wizard = scheduleNext.closest('[data-schedule-wizard]');
-    showScheduleStep(wizard, Number(wizard?.dataset.scheduleCurrentStep || 1) + 1);
+    const currentStep = Number(wizard?.dataset.scheduleCurrentStep || 1);
+    if (currentStep === 1 && !guardScheduleEligibility(wizard)) {
+      return;
+    }
+
+    showScheduleStep(wizard, currentStep + 1);
     return;
   }
 

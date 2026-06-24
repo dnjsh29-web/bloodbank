@@ -42,6 +42,23 @@ For password reset and email confirmation to work in a deployed demo, add your d
   - `https://YOUR-RENDER-SERVICE.onrender.com/login`
   - `https://YOUR-RENDER-SERVICE.onrender.com/password/reset`
 
+### Reliable Confirmation Email Delivery
+
+Supabase sends registration-confirmation and password-recovery emails. This app limits repeated confirmation-email requests for a short time and shows a friendly message if Supabase reports an email rate limit.
+
+For a deployed public demo, configure a custom SMTP provider in the Supabase Dashboard under **Authentication > SMTP Settings**. Resend has a free tier suitable for low-volume testing. Keep the SMTP API key and sender-domain credentials only in Supabase; never add them to Laravel, Render, `.env.example`, or GitHub.
+
+### Test Mode Without Email Confirmation
+
+For short, supervised classroom testing, you can let new donors sign in immediately after registration:
+
+1. In Supabase Dashboard, open **Authentication > Providers > Email** and turn **Confirm Email** off.
+2. Set `SUPABASE_EMAIL_CONFIRMATION_REQUIRED=false` in the local `.env` file or the Render environment for the test deployment.
+
+The application then expects Supabase to return a session token at signup and signs the new donor in immediately. No confirmation email or SMTP provider is needed. Existing accounts created while confirmation was enabled remain unconfirmed until they are confirmed or replaced with a new test account.
+
+Re-enable **Confirm Email** and set `SUPABASE_EMAIL_CONFIRMATION_REQUIRED=true` before any public or long-running deployment. Without confirmation, a person can register using an email address they do not own.
+
 ## Render Deployment
 
 This repo includes a Docker-based `render.yaml` Blueprint for Render free web services.

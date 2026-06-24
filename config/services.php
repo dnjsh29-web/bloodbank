@@ -40,6 +40,8 @@ return [
         'anon_key' => env('SUPABASE_ANON_KEY'),
         'storage_bucket' => env('SUPABASE_STORAGE_BUCKET', 'blood-request-documents'),
         'verify_ssl' => env('SUPABASE_VERIFY_SSL', true),
+        'email_confirmation_required' => env('SUPABASE_EMAIL_CONFIRMATION_REQUIRED', true),
+        'confirmation_cooldown_seconds' => (int) env('SUPABASE_CONFIRMATION_COOLDOWN_SECONDS', 60),
     ],
 
 ];

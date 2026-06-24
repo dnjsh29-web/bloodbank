@@ -76,6 +76,10 @@
 
                 <section data-schedule-panel="1">
                     <h2 class="section-title mb-5">Eligibility Screening</h2>
+                    <div class="schedule-deferred-alert {{ $errors->has('eligibility') ? 'is-visible' : '' }}" data-schedule-deferred-alert role="alert" @unless($errors->has('eligibility')) hidden @endunless>
+                        <strong>Deferred</strong>
+                        <span>{{ $errors->first('eligibility') ?: 'One or more screening answers require staff review before you can continue with a donation booking.' }}</span>
+                    </div>
                     <div class="space-y-3">
                         @foreach ([
                             'fever' => 'Do you currently have a fever or feel unwell?',
@@ -86,7 +90,7 @@
                         ] as $name => $question)
                             <label class="flex items-center justify-between gap-4 rounded-lg border border-red-100 bg-stone-50 p-4 text-base">
                                 <span>{{ $question }}</span>
-                                <input class="size-4 rounded border-stone-400" type="checkbox" name="{{ $name }}" value="1" @checked(old($name))>
+                                <input class="size-4 rounded border-stone-400" type="checkbox" name="{{ $name }}" value="1" data-schedule-risk-answer @checked(old($name))>
                             </label>
                         @endforeach
                     </div>

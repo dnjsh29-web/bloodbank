@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Exceptions\SupabaseEmailRateLimitException;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
@@ -33,7 +35,7 @@ class SupabaseAuthService
             ]);
 
         if ($response->failed()) {
-            throw new RuntimeException($this->message($response->json()) ?: 'Registration failed.');
+            $this->throwForFailedResponse($response, 'Registration failed.');
         }
 
         return $response->json();
@@ -48,7 +50,7 @@ class SupabaseAuthService
             ]);
 
         if ($response->failed()) {
-            throw new RuntimeException($this->message($response->json()) ?: 'Confirmation email could not be resent.');
+            $this->throwForFailedResponse($response, 'Confirmation email could not be resent.');
         }
     }
 
@@ -60,7 +62,7 @@ class SupabaseAuthService
             ]);
 
         if ($response->failed()) {
-            throw new RuntimeException($this->message($response->json()) ?: 'Password reset request failed.');
+            $this->throwForFailedResponse($response, 'Password reset request failed.');
         }
     }
 
@@ -116,5 +118,14 @@ class SupabaseAuthService
     private function message(mixed $payload): ?string
     {
         return is_array($payload) ? ($payload['msg'] ?? $payload['message'] ?? $payload['error_description'] ?? null) : null;
+    }
+
+    private function throwForFailedResponse(Response $response, string $fallback): never
+    {
+        if ($response->status() === 429) {
+            throw new SupabaseEmailRateLimitException('Email delivery is temporarily limited.');
+        }
+
+        throw new RuntimeException($this->message($response->json()) ?: $fallback);
     }
 }

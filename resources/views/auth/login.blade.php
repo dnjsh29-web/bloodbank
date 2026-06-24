@@ -37,7 +37,7 @@
                 <section class="login-card">
                     @include('partials.flash')
 
-                    @if (session('unconfirmed_email'))
+                    @if (session('unconfirmed_email') && ($emailConfirmationRequired ?? true))
                         <form method="post" action="{{ route('confirmation.resend') }}" class="mb-5 rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-800">
                             @csrf
                             <input type="hidden" name="email" value="{{ session('unconfirmed_email') }}">
