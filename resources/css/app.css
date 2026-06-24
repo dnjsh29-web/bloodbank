@@ -2707,11 +2707,16 @@ html.has-modal-open .sidebar {
     max-width: 100%;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x pan-y;
   }
 
   .data-table {
-    min-width: 42rem;
+    width: max-content;
+    min-width: 52rem;
+    max-width: none;
     font-size: 0.82rem;
+    table-layout: auto;
   }
 
   .data-table th,
@@ -2861,20 +2866,34 @@ html.has-modal-open .sidebar {
     word-break: keep-all;
   }
 
-  .data-table {
-    min-width: 40rem;
-    table-layout: fixed;
-  }
-
   .data-table th,
   .data-table td {
-    overflow-wrap: anywhere;
+    overflow-wrap: normal;
+    word-break: normal;
     vertical-align: middle;
+    white-space: nowrap;
   }
 
-  .data-table td:last-child,
-  .data-table th:last-child {
-    width: 7.25rem;
+  .data-table th:first-child,
+  .data-table td:first-child {
+    min-width: 11.5rem;
+    white-space: normal;
+  }
+
+  .data-table th:nth-child(2),
+  .data-table td:nth-child(2) {
+    min-width: 5.5rem;
+  }
+
+  .data-table th:nth-child(3),
+  .data-table td:nth-child(3) {
+    min-width: 12.5rem;
+    white-space: normal;
+  }
+
+  .data-table th:last-child,
+  .data-table td:last-child {
+    min-width: 5.5rem;
   }
 
   .data-table .btn-primary,
@@ -2995,12 +3014,52 @@ html.has-modal-open .sidebar {
   }
 
   .login-body {
+    min-height: 100dvh;
+    overflow-y: auto;
+    overscroll-behavior-y: auto;
     padding: 0;
+    touch-action: pan-y;
   }
 
   .login-frame {
+    min-height: 100dvh;
+    overflow: visible;
     border-width: 0;
     border-radius: 0;
+  }
+
+  .login-inner {
+    min-height: 100dvh;
+    padding: 2.25rem 1rem 1.5rem;
+  }
+
+  .login-brand {
+    margin-bottom: 2rem;
+  }
+
+  .login-stage {
+    width: 100%;
+    padding-top: 0;
+  }
+
+  .login-card {
+    width: min(100%, 25rem);
+    max-width: 100%;
+    padding: 1.5rem;
+  }
+
+  .login-submit {
+    display: flex;
+    width: 100%;
+    max-width: 100%;
+    min-height: 3.25rem;
+    flex-shrink: 0;
+    justify-content: center;
+    overflow: visible;
+    padding-inline: 0.75rem;
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: normal;
   }
 
   .registration-grid,

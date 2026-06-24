@@ -282,7 +282,25 @@ function initMobilePortalNav() {
   });
 }
 
+function clearStaleScrollLocks() {
+  if (!document.querySelector('.modal-shell.is-open')) {
+    document.documentElement.classList.remove('has-modal-open');
+    document.body.classList.remove('has-modal-open');
+    delete document.documentElement.dataset.modalScrollTop;
+    delete document.documentElement.dataset.modalLockCount;
+  }
+
+  if (!document.querySelector('[data-mobile-drawer].is-open')) {
+    document.documentElement.classList.remove('has-mobile-drawer-open');
+  }
+
+  if (!document.querySelector('[data-notification-drawer]:not([hidden])')) {
+    document.documentElement.classList.remove('has-notification-drawer-open');
+  }
+}
+
 function initializeDynamicWidgets() {
+  clearStaleScrollLocks();
   prepareTurboOptOuts();
   initAutoDismiss();
   initMobilePortalNav();
