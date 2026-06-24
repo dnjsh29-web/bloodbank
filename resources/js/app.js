@@ -215,9 +215,77 @@ function formatPercent(value) {
   return Number.isInteger(number) ? String(number) : number.toFixed(1);
 }
 
+function openMobileNavDrawer() {
+  const drawer = document.querySelector('[data-mobile-drawer]');
+  const backdrop = document.querySelector('[data-mobile-drawer-backdrop]');
+  if (!drawer || !backdrop) {
+    return;
+  }
+
+  window.clearTimeout(drawer._mobileCloseTimer);
+  drawer.hidden = false;
+  backdrop.hidden = false;
+  drawer.setAttribute('aria-hidden', 'false');
+  document.documentElement.classList.add('has-mobile-drawer-open');
+  document.querySelectorAll('[data-mobile-menu-open]').forEach((button) => {
+    button.setAttribute('aria-expanded', 'true');
+  });
+
+  window.requestAnimationFrame(() => {
+    drawer.classList.add('is-open');
+    backdrop.classList.add('is-open');
+  });
+}
+
+function closeMobileNavDrawer({ immediate = false } = {}) {
+  const drawer = document.querySelector('[data-mobile-drawer]');
+  const backdrop = document.querySelector('[data-mobile-drawer-backdrop]');
+  if (!drawer || !backdrop) {
+    return;
+  }
+
+  drawer.classList.remove('is-open');
+  backdrop.classList.remove('is-open');
+  drawer.setAttribute('aria-hidden', 'true');
+  document.documentElement.classList.remove('has-mobile-drawer-open');
+  document.querySelectorAll('[data-mobile-menu-open]').forEach((button) => {
+    button.setAttribute('aria-expanded', 'false');
+  });
+
+  const finish = () => {
+    drawer.hidden = true;
+    backdrop.hidden = true;
+  };
+
+  window.clearTimeout(drawer._mobileCloseTimer);
+  if (immediate) {
+    finish();
+    return;
+  }
+
+  drawer._mobileCloseTimer = window.setTimeout(finish, 220);
+}
+
+function initMobilePortalNav() {
+  const drawer = document.querySelector('[data-mobile-drawer]');
+  const backdrop = document.querySelector('[data-mobile-drawer-backdrop]');
+  if (!drawer || !backdrop) {
+    return;
+  }
+
+  const isOpen = drawer.classList.contains('is-open');
+  drawer.hidden = !isOpen;
+  backdrop.hidden = !isOpen;
+  drawer.setAttribute('aria-hidden', String(!isOpen));
+  document.querySelectorAll('[data-mobile-menu-open]').forEach((button) => {
+    button.setAttribute('aria-expanded', String(isOpen));
+  });
+}
+
 function initializeDynamicWidgets() {
   prepareTurboOptOuts();
   initAutoDismiss();
+  initMobilePortalNav();
   initLoginCarousel();
   initScheduleLeafletMaps();
   initAdminLeafletMaps();
@@ -229,7 +297,8 @@ function initializeDynamicWidgets() {
   syncActiveTabInputs();
   refreshIcons();
 
-  if (panelName === 'map') {
+  const activePanel = document.querySelector('[data-portal-content]')?.dataset.activePanel;
+  if (activePanel === 'map') {
     window.setTimeout(() => initAdminLeafletMaps(), 60);
   }
 }
@@ -1558,6 +1627,7 @@ document.addEventListener('turbo:before-cache', () => {
   document.querySelectorAll('[data-notification-center]').forEach((container) => delete container.dataset.notificationReady);
   document.querySelectorAll('[data-notification-drawer]').forEach((drawer) => delete drawer.dataset.drawerReady);
   document.querySelectorAll('[data-inventory-workspace]').forEach((workspace) => delete workspace.dataset.inventoryReady);
+  closeMobileNavDrawer({ immediate: true });
   closeNotificationDrawer();
   closeModal(document.querySelector('.modal-shell.is-open'));
   hideTooltip();
@@ -1567,7 +1637,38 @@ document.addEventListener('click', (event) => {
   const newDonation = event.target.closest('[data-new-donation]');
   if (newDonation) {
     event.preventDefault();
+    closeMobileNavDrawer();
     openNewDonation(newDonation);
+    return;
+  }
+
+  const mobileDrawerClose = event.target.closest('[data-mobile-drawer-close]');
+  if (mobileDrawerClose || event.target.matches('[data-mobile-drawer-backdrop]')) {
+    event.preventDefault();
+    closeMobileNavDrawer();
+    return;
+  }
+
+  const mobileMenuOpen = event.target.closest('[data-mobile-menu-open]');
+  if (mobileMenuOpen) {
+    event.preventDefault();
+    openMobileNavDrawer();
+    return;
+  }
+
+  const mobileRailTab = event.target.closest('[data-mobile-rail-tab]');
+  if (mobileRailTab && mobileRailTab.dataset.panelUrl) {
+    event.preventDefault();
+    loadPortalPanel(mobileRailTab);
+    openMobileNavDrawer();
+    return;
+  }
+
+  const mobileDrawerTab = event.target.closest('[data-mobile-drawer-tab]');
+  if (mobileDrawerTab && mobileDrawerTab.dataset.panelUrl) {
+    event.preventDefault();
+    loadPortalPanel(mobileDrawerTab);
+    closeMobileNavDrawer();
     return;
   }
 
@@ -1853,6 +1954,7 @@ window.addEventListener('hashchange', () => {
 
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
+    closeMobileNavDrawer();
     closeModal(document.querySelector('.modal-shell.is-open'));
     closeNotificationDrawer();
   }
